@@ -6,9 +6,14 @@ use super::components::{
     component::{Component, ComponentRender, RenderProps},
     main_page::MainPage,
 };
-use crate::state_handler::{action::Action, state::State};
+
+use crate::state_handler::{
+    action::Action,
+    state::{CurrentPage, State},
+};
 
 pub struct AppRouter {
+    active_page: CurrentPage,
     main_page: MainPage,
 }
 
@@ -18,7 +23,8 @@ impl Component for AppRouter {
         Self: Sized,
     {
         AppRouter {
-            main_page: MainPage::new(state, action_tx),
+            active_page: state.current_page.clone(),
+            main_page: MainPage::new(state, action_tx.clone()),
         }
     }
 
@@ -27,6 +33,7 @@ impl Component for AppRouter {
         Self: Sized,
     {
         AppRouter {
+            active_page: state.current_page.clone(),
             main_page: self.main_page.update(state),
         }
     }
@@ -38,12 +45,11 @@ impl Component for AppRouter {
 
 impl ComponentRender<RenderProps> for AppRouter {
     fn render(&mut self, frame: &mut Frame, props: RenderProps) {
-        self.main_page.render(
-            frame,
-            RenderProps {
-                area: props.area,
-                options: props.options,
-            },
-        );
+        match self.active_page {
+            CurrentPage::MainPage => {
+                self.main_page
+                    .render(frame, RenderProps { area: props.area });
+            }
+        }
     }
 }

@@ -1,15 +1,11 @@
 use crossterm::event::KeyEvent;
-use ratatui::{layout::Rect, style::Color, Frame};
+use ratatui::{layout::Rect, Frame};
 use tokio::sync::mpsc::UnboundedSender;
 
-use crate::state_handler::{
-    action::Action,
-    state::{Options, State},
-};
+use crate::state_handler::{action::Action, state::State};
 
 pub struct RenderProps {
     pub area: Rect,
-    pub options: Options,
 }
 
 pub trait Component {

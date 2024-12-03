@@ -7,7 +7,11 @@ use tokio::{
     },
 };
 
-use state_handler::{action::Action, state::State, StateHandler};
+use state_handler::{
+    action::Action,
+    state::{CurrentPage, State},
+    StateHandler,
+};
 use tui::{
     app_router::AppRouter,
     components::component::{Component, ComponentRender, RenderProps},
@@ -17,7 +21,12 @@ use tui::{
 mod state_handler;
 mod tui;
 
-async fn run(shutdown_rx: &mut Receiver<String>, shutdown_tx: Sender<String>) {
+#[derive(Clone, Debug)]
+enum Terminate {
+    StateExit,
+}
+
+async fn run(shutdown_rx: &mut Receiver<Terminate>, shutdown_tx: Sender<Terminate>) {
     let (tui_handler, mut action_rx, mut event_handler) = Tui::new();
     let (state_handler, mut state_rx) = StateHandler::new();
     let mut shutdown_rx_tui = shutdown_rx.resubscribe();
@@ -31,22 +40,30 @@ async fn run(shutdown_rx: &mut Receiver<String>, shutdown_tx: Sender<String>) {
 
         loop {
             if state.exit {
-                let _ = shutdown_tx.send("end".to_string()).unwrap();
+                let _ = shutdown_tx.send(Terminate::StateExit).unwrap();
             }
 
             tokio::select! {
                 _tick = ticker.tick() => {},
                 action = action_rx.recv() => {
                     match action.unwrap() {
+                        Action::SelectFile => {
+                            state.set_popup();
+                        }
+                        Action::ClosePopup => {
+                            state.set_popup();
+                        }
                         Action::Quit => {
                             state.exit();
-                        }
+                        },
                     }
                 },
                 _ = shutdown_rx_state.recv() => {
                     break;
                 }
             }
+
+            let _ = state_handler.state_tx.send(state.clone()).unwrap();
         }
     });
 
@@ -56,15 +73,7 @@ async fn run(shutdown_rx: &mut Receiver<String>, shutdown_tx: Sender<String>) {
         let mut app_router = AppRouter::new(&state, tui_handler.action_tx);
 
         // Iniital render
-        let _ = terminal.draw(|f| {
-            app_router.render(
-                f,
-                RenderProps {
-                    area: f.area(),
-                    options: state.options.clone(),
-                },
-            )
-        });
+        let _ = terminal.draw(|f| app_router.render(f, RenderProps { area: f.area() }));
 
         let mut ticker = tokio::time::interval(Duration::from_millis(250));
 
@@ -93,15 +102,7 @@ async fn run(shutdown_rx: &mut Receiver<String>, shutdown_tx: Sender<String>) {
                 }
             }
 
-            let _ = terminal.draw(|f| {
-                app_router.render(
-                    f,
-                    RenderProps {
-                        area: f.area(),
-                        options: state.options.clone(),
-                    },
-                )
-            });
+            let _ = terminal.draw(|f| app_router.render(f, RenderProps { area: f.area() }));
         }
 
         Tui::teardown_terminal(&mut terminal);
@@ -116,7 +117,7 @@ fn shutdown() {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let (shutdown_tx, mut shutdown_rx) = broadcast::channel::<String>(1);
+    let (shutdown_tx, mut shutdown_rx) = broadcast::channel::<Terminate>(1);
     let mut shutdown_rx_main = shutdown_rx.resubscribe();
 
     tokio::spawn(async move {
